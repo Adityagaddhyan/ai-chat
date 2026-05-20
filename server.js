@@ -4,6 +4,8 @@ import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import { z } from "zod";
 import { zodFunction } from "openai/helpers/zod";
+import { loadDocuments, searchRelevantChunks } from "./ragStore.js";
+await loadDocuments();
 
 const OrderStatusSchema = zodFunction({
     name: "getOrderStatus",
@@ -64,8 +66,10 @@ app.post('/chat', async (req, res) => {
     };
     const systemPrompt = {
         role: 'system',
-        content: 'You are a helpful assistant. Be clear and concise in your responses.'
-    }
+        content: `Use the retrieved context when relevant.
+When answering from context, cite chunk IDs like [chunk-1].
+If context is insufficient, say you do not know.`
+    };
     try {
         const assistantText = await runAgentLoop(history, currentUserMessage, systemPrompt, res);
 
@@ -91,7 +95,15 @@ async function runAgentLoop(history, currentUserMessage, systemPrompt, res) {
     const tools = Object.values(toolRegistry)
         .map(tool => tool.definition)
         .filter(Boolean);
+    const relevantChunks = await searchRelevantChunks(
+        currentUserMessage.content
+    );
+    console.log('Relevant chunks:', relevantChunks);
+    const contextText = relevantChunks
+        .map(c => `[${c.id} | ${c.source}]\n${c.text}`)
+        .join("\n\n");
     const trimmedHistory = history.slice(-MAX_HISTORY_MESSAGES);
+    systemPrompt.content += `\n\nRelevant information:\n${contextText}`;
     const conversationMessages = [systemPrompt, ...trimmedHistory, currentUserMessage];
 
     for (let step = 0; step < MAX_TOOL_STEPS; step++) {
@@ -146,7 +158,7 @@ async function collectModelResponse(messages, tools, res = null) {
     const toolCalls = new Map();
 
     for await (const event of stream) {
-        console.log('Received event:', JSON.stringify(event));
+        // console.log('Received event:', JSON.stringify(event));
         const choice = event.choices?.[0];
         const delta = choice?.delta;
         const finishReason = choice?.finish_reason;
@@ -157,7 +169,6 @@ async function collectModelResponse(messages, tools, res = null) {
         }
 
         for (const tc of delta?.tool_calls || []) {
-            console.log('Tool call detected:', JSON.stringify(tc));
             const index = tc.index ?? 0;
 
             if (!toolCalls.has(index)) {
@@ -174,7 +185,6 @@ async function collectModelResponse(messages, tools, res = null) {
             if (tc.function?.name) current.name = tc.function.name;
             if (tc.function?.arguments) current.arguments += tc.function.arguments;
 
-            console.log('Updated tool call state:', JSON.stringify(current));
         }
 
         if (finishReason) {
