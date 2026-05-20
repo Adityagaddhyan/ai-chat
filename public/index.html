@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>AI Chat</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+    }
+
+    #chat {
+      border: 1px solid #ddd;
+      padding: 16px;
+      min-height: 400px;
+      margin-bottom: 12px;
+    }
+
+    .user {
+      font-weight: bold;
+      margin-top: 16px;
+    }
+
+    .assistant {
+      white-space: pre-wrap;
+      margin-top: 8px;
+    }
+
+    textarea {
+      width: 100%;
+      height: 80px;
+    }
+
+    button {
+      margin-top: 8px;
+      padding: 10px 16px;
+    }
+  </style>
+</head>
+<body>
+  <h1>AI Chat</h1>
+
+  <div id="chat"></div>
+
+  <textarea id="message" placeholder="Ask something..."></textarea>
+  <button onclick="sendMessage()">Send</button>
+
+  <script>
+    const chat = document.getElementById("chat");
+    const messageBox = document.getElementById("message");
+    const conversationId = crypto.randomUUID();
+
+    async function sendMessage() {
+      const message = messageBox.value.trim();
+      if (!message) return;
+
+      messageBox.value = "";
+
+      const userDiv = document.createElement("div");
+      userDiv.className = "user";
+      userDiv.textContent = "You: " + message;
+      chat.appendChild(userDiv);
+
+      const assistantDiv = document.createElement("div");
+      assistantDiv.className = "assistant";
+      assistantDiv.textContent = "AI: ";
+      chat.appendChild(assistantDiv);
+
+      const response = await fetch("/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          conversationId,
+          message
+        })
+      });
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const events = chunk.split("\n\n");
+
+        for (const event of events) {
+          if (!event.startsWith("data: ")) continue;
+
+          const data = JSON.parse(event.replace("data: ", ""));
+
+          if (data.delta) {
+            assistantDiv.textContent += data.delta;
+          }
+
+          if (data.error) {
+            assistantDiv.textContent += "\nError: " + data.error;
+          }
+        }
+      }
+    }
+  </script>
+</body>
+</html>
