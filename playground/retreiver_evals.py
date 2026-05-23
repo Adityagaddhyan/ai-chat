@@ -58,7 +58,7 @@ def reciprocal_rank(relevance_matrix):
 def evaluate_retrieval(retrieved_docs, desired_category, total_relevant_count):
     relevance_matrix = build_relevance_matrix(retrieved_docs, desired_category)
     retrieved_relevant_count = sum(relevance_matrix)
-
+    
     return {
         "precision_at_k": precision_at_k(retrieved_relevant_count, len(retrieved_docs)),
         "recall_at_k": recall_at_k(total_relevant_count, retrieved_relevant_count),
