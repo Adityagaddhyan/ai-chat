@@ -31,6 +31,8 @@ coverage/
 .parcel-cache/
 .eslintcache
 .vite/
+__pycache__/
+*.py[cod]
 
 # Local editor and OS files
 .vscode/
